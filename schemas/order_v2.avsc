@@ -1,0 +1,35 @@
+{
+  "type": "record",
+  "name": "Order",
+  "namespace": "com.bigdata.assignment.orders",
+  "doc": "Version 2 of the Order record. Adds two fields, both with defaults, so that a v2 reader can still decode v1 bytes (backward compatible) and a v1 reader can ignore the new fields (forward compatible). Used by tests/test_avro_codec.py to demonstrate schema evolution; the pipeline itself runs on order.avsc.",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Unique identifier for the order."
+    },
+    {
+      "name": "product",
+      "type": "string",
+      "doc": "Name of the purchased item."
+    },
+    {
+      "name": "price",
+      "type": "float",
+      "doc": "Price of the product."
+    },
+    {
+      "name": "quantity",
+      "type": "int",
+      "default": 1,
+      "doc": "Units purchased. Defaulted so v1 bytes remain readable."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "default": "USD",
+      "doc": "ISO currency code. Defaulted so v1 bytes remain readable."
+    }
+  ]
+}

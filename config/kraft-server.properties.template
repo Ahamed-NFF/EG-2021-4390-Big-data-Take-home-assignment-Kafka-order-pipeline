@@ -1,0 +1,47 @@
+# Single-node KRaft broker for the assignment demo.
+#
+# KRaft (Kafka Raft) replaces ZooKeeper: this one JVM is both the controller
+# that holds cluster metadata and the broker that serves data, which is why
+# process.roles lists both. Kafka 4.x removed ZooKeeper entirely, so there is
+# no second service to start.
+#
+# scripts/start-kafka.ps1 renders this template, substituting {{LOG_DIRS}}.
+
+process.roles=broker,controller
+node.id=1
+controller.quorum.bootstrap.servers=localhost:9093
+
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+advertised.listeners=PLAINTEXT://localhost:9092
+inter.broker.listener.name=PLAINTEXT
+controller.listener.names=CONTROLLER
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL
+
+log.dirs={{LOG_DIRS}}
+
+# Topics are created explicitly by src/create_topics.py so the DLQ gets its
+# longer retention and the aggregates topic gets compaction. Auto-creation
+# would silently produce default topics on a typo instead of failing loudly.
+auto.create.topics.enable=false
+num.partitions=3
+
+# Single node, so nothing can be replicated more than once.
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+share.coordinator.state.topic.replication.factor=1
+share.coordinator.state.topic.min.isr=1
+
+# Small internal topics start up noticeably faster on a laptop.
+group.initial.rebalance.delay.ms=0
+
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+num.recovery.threads.per.data.dir=1
+
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000

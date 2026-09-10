@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "Order",
+  "namespace": "com.bigdata.assignment.orders",
+  "doc": "A single purchase transaction emitted by the order service.",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Unique identifier for the order (e.g. \"1001\", \"1002\")."
+    },
+    {
+      "name": "product",
+      "type": "string",
+      "doc": "Name of the purchased item (e.g. \"Item1\", \"Item2\")."
+    },
+    {
+      "name": "price",
+      "type": "float",
+      "doc": "Price of the product (randomised for the assignment)."
+    }
+  ]
+}

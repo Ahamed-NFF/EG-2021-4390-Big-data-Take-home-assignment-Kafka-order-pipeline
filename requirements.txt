@@ -1,0 +1,11 @@
+# Kafka client. Wraps librdkafka, so it ships the same battle-tested C client
+# the Java ecosystem's behaviour is specified against, including idempotent
+# producer support.
+confluent-kafka>=2.5,<3
+
+# Avro encoder/decoder. Pure-Python C-accelerated implementation; used here for
+# schemaless (single-object) encoding and schema fingerprinting.
+fastavro>=1.9,<2
+
+# Test runner.
+pytest>=8.0

@@ -1,0 +1,11 @@
+# Normalise to LF in the repository so the diff is stable across machines.
+* text=auto eol=lf
+
+# PowerShell and cmd stay CRLF in the working tree — that is what Windows
+# tooling expects, and a .cmd with LF endings can misparse.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Captured demo output is a transcript, not source; keep it verbatim.
+docs/demo-output.txt -text
