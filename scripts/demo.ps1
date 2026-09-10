@@ -23,10 +23,13 @@
 [CmdletBinding()]
 param(
     [int]$Count = 60,
-    [double]$Rate = 25,
+    [double]$Rate = 10,
     [double]$CorruptRate = 0.08,
     [double]$InvalidRate = 0.08,
     [double]$TransientFailureRate = 0.25,
+    [ValidateSet("topics", "blocking")]
+    [string]$RetryMode = "topics",
+    [double]$WindowSeconds = 2,
     [int]$Seed = 42,
     [switch]$Reset,
     [switch]$Transcript
@@ -49,7 +52,8 @@ if ($Transcript) {
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath,
         "-Count", $Count, "-Rate", $Rate,
         "-CorruptRate", $CorruptRate, "-InvalidRate", $InvalidRate,
-        "-TransientFailureRate", $TransientFailureRate, "-Seed", $Seed
+        "-TransientFailureRate", $TransientFailureRate, "-Seed", $Seed,
+        "-RetryMode", $RetryMode, "-WindowSeconds", $WindowSeconds
     )
     if ($Reset) { $childArgs += "-Reset" }
 
@@ -90,7 +94,7 @@ try {
     & "$PSScriptRoot\start-kafka.ps1"
     if ($LASTEXITCODE -ne 0) { throw "Kafka failed to start." }
 
-    Step 2 "Create topics: orders, orders.DLQ, orders.aggregates"
+    Step 2 "Create topics: orders, 3 retry tiers, orders.DLQ, orders.aggregates"
     python -m src.create_topics
     if ($LASTEXITCODE -ne 0) { throw "Topic creation failed." }
 
@@ -99,8 +103,9 @@ try {
         --corrupt-rate $CorruptRate --invalid-rate $InvalidRate --seed $Seed
     if ($LASTEXITCODE -ne 0) { throw "Producer failed." }
 
-    Step 4 "Consume: decode, validate, retry transient failures, DLQ the rest"
-    python -m src.consumer --max-messages $Count --idle-timeout 25 `
+    Step 4 "Consume: decode, validate, retry ($RetryMode), aggregate, DLQ the rest"
+    python -m src.consumer --retry-mode $RetryMode --max-messages $Count `
+        --window-seconds $WindowSeconds --idle-timeout 25 --drain-timeout 8 `
         --transient-failure-rate $TransientFailureRate --seed 7
     if ($LASTEXITCODE -ne 0) { throw "Consumer failed." }
 
@@ -114,10 +119,13 @@ try {
     Write-Host ("=" * 74) -ForegroundColor Green
     Write-Host "  DEMO COMPLETE" -ForegroundColor Green
     Write-Host ("=" * 74) -ForegroundColor Green
-    Write-Host "  Running averages were published to the 'orders.aggregates' topic."
-    Write-Host "  Read them with:"
+    Write-Host "  Cumulative averages and closed tumbling windows were published to"
+    Write-Host "  the 'orders.aggregates' topic. Read them with:"
     Write-Host "    C:\kafka\bin\windows\kafka-console-consumer.bat --bootstrap-server localhost:9092 ``"
     Write-Host "        --topic orders.aggregates --from-beginning --timeout-ms 10000"
+    Write-Host ""
+    Write-Host "  Measure blocking vs non-blocking retry on identical input:"
+    Write-Host "    .\scripts\compare-retry-modes.ps1"
     Write-Host ""
     Write-Host "  Stop the broker with:  .\scripts\stop-kafka.ps1"
     Write-Host ""
