@@ -42,3 +42,13 @@ class ValidationError(PermanentError):
     A negative price is a real Avro float, so Avro accepts it; the domain does
     not. The record is poison and belongs in the DLQ for a human to look at.
     """
+
+
+class DlqWriteError(OrderProcessingError):
+    """The DLQ itself could not be written to.
+
+    This is the one failure that must never be swallowed. The DLQ is where a
+    record goes when nothing else worked; if that write fails and the offset is
+    committed anyway, the record is gone for good. Raising here keeps the
+    offset uncommitted so the broker redelivers the record.
+    """

@@ -18,23 +18,45 @@ import time
 from confluent_kafka.admin import AdminClient, NewTopic
 
 from . import config
+from .retry_topics import build_tiers
 
 THIRTY_DAYS_MS = str(30 * 24 * 60 * 60 * 1000)
 
 
 def topic_specs(partitions: int, replication: int) -> list[NewTopic]:
-    return [
+    tiers = build_tiers(config.RETRY_TOPIC_PREFIX, config.RETRY_TIER_DELAYS)
+
+    specs = [
         NewTopic(
             config.TOPIC_ORDERS,
             num_partitions=partitions,
             replication_factor=replication,
             config={"cleanup.policy": "delete"},
         ),
+    ]
+
+    # One topic per retry tier. Every record on a given tier carries the same
+    # delay, which keeps each tier ordered by due time - that is what lets a
+    # consumer pause on the head record instead of scanning ahead.
+    specs += [
+        NewTopic(
+            tier.topic,
+            num_partitions=partitions,
+            replication_factor=replication,
+            config={"cleanup.policy": "delete"},
+        )
+        for tier in tiers
+    ]
+
+    specs += [
         NewTopic(
             config.TOPIC_DLQ,
-            # Failure volume is low; one partition keeps DLQ records in the
-            # order they failed, which makes manual triage far easier.
-            num_partitions=1,
+            # Matches the source partition count. Replay re-publishes with the
+            # original key, and keeping the counts aligned is what preserves
+            # per-key ordering through a DLQ round trip. Order ids happen to be
+            # unique here, so it makes no practical difference today - but it
+            # would the moment a key could repeat.
+            num_partitions=partitions,
             replication_factor=replication,
             config={"cleanup.policy": "delete", "retention.ms": THIRTY_DAYS_MS},
         ),
@@ -42,11 +64,13 @@ def topic_specs(partitions: int, replication: int) -> list[NewTopic]:
             config.TOPIC_AGGREGATES,
             num_partitions=1,
             replication_factor=replication,
-            # Compacted: only the latest running-average snapshot per key
-            # matters, so old snapshots are collapsed away.
+            # Compacted: only the latest snapshot per key matters. Cumulative
+            # snapshots share one key so old ones collapse; each window gets
+            # its own key so the window history is retained.
             config={"cleanup.policy": "compact"},
         ),
     ]
+    return specs
 
 
 def _delete_existing(admin: AdminClient, names: list[str]) -> None:
@@ -110,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.recreate:
-        ours = [config.TOPIC_ORDERS, config.TOPIC_DLQ, config.TOPIC_AGGREGATES]
+        ours = [t.topic for t in topic_specs(args.partitions, args.replication)]
         _delete_existing(admin, [t for t in ours if t in existing])
         existing = set(admin.list_topics(timeout=15).topics)
 

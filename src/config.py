@@ -38,13 +38,30 @@ TOPIC_REPLICATION = _env_int("KAFKA_TOPIC_REPLICATION", 1)
 # --- Consumer group ---------------------------------------------------------
 CONSUMER_GROUP = _env("KAFKA_CONSUMER_GROUP", "order-processing-group")
 
-# --- Retry policy -----------------------------------------------------------
+# --- Retry policy (blocking mode) -------------------------------------------
 # Total attempts for a transient failure, including the first try.
 RETRY_MAX_ATTEMPTS = _env_int("RETRY_MAX_ATTEMPTS", 4)
 RETRY_BASE_DELAY_SECONDS = _env_float("RETRY_BASE_DELAY_SECONDS", 0.25)
 RETRY_MAX_DELAY_SECONDS = _env_float("RETRY_MAX_DELAY_SECONDS", 4.0)
 RETRY_MULTIPLIER = _env_float("RETRY_MULTIPLIER", 2.0)
 RETRY_JITTER_RATIO = _env_float("RETRY_JITTER_RATIO", 0.3)
+
+# --- Retry policy (non-blocking topic mode) ---------------------------------
+# Delay before each retry tier is eligible for reprocessing, in seconds.
+# Deliberately small so the pattern is watchable in a live demo; production
+# values would be more like 30s / 5m / 30m.
+RETRY_TIER_DELAYS = [
+    _env_float("RETRY_TIER_1_DELAY", 2.0),
+    _env_float("RETRY_TIER_2_DELAY", 6.0),
+    _env_float("RETRY_TIER_3_DELAY", 15.0),
+]
+RETRY_TOPIC_PREFIX = _env("KAFKA_RETRY_TOPIC_PREFIX", "orders.retry")
+
+# --- Replay budget ----------------------------------------------------------
+# How many times a single record may be replayed out of the DLQ before the
+# tooling refuses. Without a ceiling, replay -> fail -> DLQ -> replay is an
+# unbounded loop that never converges.
+MAX_REPLAYS = _env_int("MAX_REPLAYS", 3)
 
 # --- Fault injection (demo only) --------------------------------------------
 # Probability the simulated downstream sink raises a *transient* error.
@@ -57,6 +74,13 @@ INVALID_MESSAGE_RATE = _env_float("INVALID_MESSAGE_RATE", 0.05)
 # --- Aggregation ------------------------------------------------------------
 # How often the running aggregate snapshot is published to TOPIC_AGGREGATES.
 AGGREGATE_PUBLISH_EVERY = _env_int("AGGREGATE_PUBLISH_EVERY", 10)
+
+# Tumbling window width. The cumulative average answers "what is the average
+# order value since this consumer started"; the window answers "what is it
+# right now", which is the question that matters on a live stream.
+WINDOW_SECONDS = _env_float("WINDOW_SECONDS", 10.0)
+# Late records arriving within the grace period still land in their window.
+WINDOW_GRACE_SECONDS = _env_float("WINDOW_GRACE_SECONDS", 2.0)
 
 # --- Demo data --------------------------------------------------------------
 PRODUCTS = ["Item1", "Item2", "Item3", "Item4", "Item5"]
