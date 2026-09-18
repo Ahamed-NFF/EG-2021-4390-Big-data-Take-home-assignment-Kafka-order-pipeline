@@ -11,49 +11,14 @@ mode, `confluent-kafka` (librdkafka) and `fastavro`. No ZooKeeper, no Docker.
 
 ## Architecture
 
-```
-                    ┌──────────────────────────────────────────┐
-                    │  producer.py                             │
-                    │  build order → Avro encode → publish     │
-                    │  (+ deliberately injects bad messages)   │
-                    └────────────────────┬─────────────────────┘
-                                         │  Avro single-object encoded bytes
-                                         ▼
-                              ┌─────────────────────┐
-                              │  topic: orders      │  3 partitions
-                              │  key = orderId      │
-                              └──────────┬──────────┘
-                                         ▼
-    ┌────────────────────────────────────────────────────────────────────┐
-    │  consumer.py                                                       │
-    │                                                                    │
-    │   1. Avro decode ─────── fails ──► DeserializationError ─┐         │
-    │        │                             (permanent)         │         │
-    │        ▼                                                 │         │
-    │   2. validate ────────── fails ──► ValidationError ──────┤         │
-    │        │                             (permanent)         │         │
-    │        ▼                                                 │         │
-    │   3. downstream sink ─── fails ──► TransientError ──► retry        │
-    │        │                                                 │         │
-    │        ▼                                                 │         │
-    │   4. aggregate: cumulative average + tumbling windows    │         │
-    │        │                                                 │         │
-    │   5. commit offset  ◄────────────────────────────────────┘         │
-    └───────┬───────────────────────┬──────────────────────────┬─────────┘
-            ▼                       ▼                          ▼
-  ┌───────────────────┐   ┌──────────────────────┐   ┌───────────────────┐
-  │ orders.aggregates │   │  retry ladder        │   │  orders.DLQ       │
-  │ cumulative snaps  │   │  orders.retry.1 (2s) │   │  original bytes + │
-  │ + closed windows  │   │  orders.retry.2 (6s) │   │  diagnostics,     │
-  │ log-compacted     │   │  orders.retry.3 (15s)│   │  30-day retention │
-  └───────────────────┘   └───────┬──────────────┘   └─────────┬─────────┘
-                                  │ exhausted                  ▼
-                                  └───────────────►  ┌───────────────────┐
-                                                     │ dlq_tool.py       │
-                                                     │ inspect / replay  │
-                                                     │ (bounded budget)  │
-                                                     └───────────────────┘
-```
+![Architecture of the Kafka order pipeline: producer publishes Avro-encoded
+orders to the orders topic; the consumer decodes, validates, calls a downstream
+sink, aggregates and commits; transient failures move through a three-tier retry
+ladder while permanent failures go straight to the DLQ; exhausted retries also
+land in the DLQ, which dlq_tool can inspect and replay under a bounded budget.](docs/architecture.png)
+
+A vector copy is at [docs/architecture.pdf](docs/architecture.pdf), and the
+TikZ source that generates both is [docs/architecture.tex](docs/architecture.tex).
 
 ### Requirements coverage
 
